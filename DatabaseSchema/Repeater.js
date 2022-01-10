@@ -21,6 +21,7 @@ const repeaterSchema = new mongoose.Schema({
         }
     }
 }, { timestamps: true });
+// TODO: Add repeater-metadata (Tone, 1750Hz, DMR ID etc.)
 
 repeaterSchema.index({loc: '2dsphere'});
 

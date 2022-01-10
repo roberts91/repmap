@@ -3,8 +3,7 @@ import { rename, rm } from 'fs';
 import CSVToJSON from 'csvtojson';
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import { Repeater } from './DatabaseSchema/Repeater.js';
-import { decodeLatLonFromMaidenheadLocator, locatorIsValid } from './maidenheadCalc.js';
+import { storeRepeater, formatRepeater } from './repeaterModel.js';
 
 await dotenv.config()
 await mongoose.connect(createMongodbConnectionString())
@@ -40,55 +39,6 @@ CSVToJSON().fromFile(newPath)
 });
 
 await rm(newPath, () => {});
-
-/**
- * Store repeater.
- *
- * @param repeater
- * @returns {Promise<void>}
- */
-async function storeRepeater(repeater)
-{
-    try {
-        const filter = { callsign: repeater.callsign };
-        await Repeater.findOneAndUpdate(filter, repeater, {
-            new: true,
-            upsert: true,
-        });
-    } catch (e) {}
-}
-
-/**
- * Format repeater-object.
- *
- * @param repeater
- * @returns {{}}
- */
-function formatRepeater(repeater) {
-    repeater = setRepeaterObjectKeys(repeater);
-    if (locatorIsValid(repeater.locator)) {
-        const location = decodeLatLonFromMaidenheadLocator(repeater.locator);
-        repeater.location = {
-            type: 'Point',
-            coordinates: [location.lat, location.lon],
-        };
-    } else {
-        repeater.locator = null;
-    }
-    return repeater;
-}
-
-/**
- * Set correct keys for repeater-object.
- *
- * @returns {{}}
- */
-function setRepeaterObjectKeys(repeater)
-{
-    const keys = ['callsign', 'qth', 'txFreq', 'rxFreq', 'group', 'locator', 'type', 'info'];
-    const values = Object.values(repeater);
-    return keys.reduce((obj, key, index) => ({ ...obj, [key]: values[index] }), {});
-}
 
 /**
  * Create MongoDB connection string.

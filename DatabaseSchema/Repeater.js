@@ -9,6 +9,11 @@ const repeaterSchema = new mongoose.Schema({
     locator: String,
     type: String,
     info: String,
+    parsedInfo: String,
+    metaData: {
+        type: Object,
+        required: false
+    },
     location: {
         type: {
             type: String,
@@ -21,7 +26,6 @@ const repeaterSchema = new mongoose.Schema({
         }
     }
 }, { timestamps: true });
-// TODO: Add repeater-metadata (Tone, 1750Hz, DMR ID etc.)
 
 repeaterSchema.index({loc: '2dsphere'});
 

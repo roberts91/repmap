@@ -1,6 +1,16 @@
 import {Repeater} from "./DatabaseSchema/Repeater.js";
 import {decodeLatLonFromMaidenheadLocator, locatorIsValid} from "./maidenheadCalc.js";
 
+export async function getRepeaters()
+{
+    return Repeater.find({});
+}
+
+export async function getRepeater(id)
+{
+    return Repeater.findById(id);
+}
+
 /**
  * Store repeater.
  *
@@ -208,7 +218,7 @@ function setRepeaterObjectKeys(repeater)
 
 /**
  * Trim-function but it works just like PHP's trim-function.
- * 
+ *
  * @param str
  * @param charlist
  * @returns {string|string}

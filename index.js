@@ -1,12 +1,13 @@
 import playwright from 'playwright';
 import { rename, rm, access } from 'fs';
 import CSVToJSON from 'csvtojson';
-import mongoose from 'mongoose'
-import dotenv from 'dotenv'
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 import { storeRepeater, formatRepeater } from './repeaterModel.js';
+import { createMongodbConnectionString } from './connection.js';
 
-await dotenv.config()
-await mongoose.connect(createMongodbConnectionString())
+await dotenv.config();
+await mongoose.connect(createMongodbConnectionString());
 const filePath = process.cwd() + '/file.csv';
 const downloadFile = process.env.DOWNLOAD_FILE === 'true';
 
@@ -73,14 +74,4 @@ async function exists (path) {
     } catch {
         return false
     }
-}
-
-/**
- * Create MongoDB connection string.
- *
- * @returns {string}
- */
-function createMongodbConnectionString()
-{
-    return 'mongodb://' + process.env.MONGODB_USER + ':' + process.env.MONGODB_PASS + '@' + process.env.MONGODB_IP + ':' + process.env.MONGODB_PORT + '/' + process.env.MONGO_INITDB_DATABASE
 }

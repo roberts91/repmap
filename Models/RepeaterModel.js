@@ -1,14 +1,32 @@
-import {Repeater} from "./DatabaseSchema/Repeater.js";
-import {decodeLatLonFromMaidenheadLocator, locatorIsValid} from "./maidenheadCalc.js";
+import {Repeater} from '../DatabaseSchema/Repeater.js';
+import {decodeLatLonFromMaidenheadLocator, locatorIsValid} from '../MaidenheadCalc.js';
+import {Group} from "../DatabaseSchema/Group.js";
 
-export async function getRepeaters()
+/**
+ * Get repeaters.
+ *
+ * @returns {Promise<Query<Array<HydratedDocument<any, {}, {}>>, any, {}, any>>}
+ */
+export async function getRepeaters(args)
 {
-    return Repeater.find({});
+    const query = {};
+    if (args && args.group) {
+        query.group = args.group.id;
+    }
+    return Repeater.find(query)
+        .populate('group');
 }
 
+/**
+ * Get repeater by Id.
+ *
+ * @param id
+ * @returns {Promise<Query<any, any, {}, any>>}
+ */
 export async function getRepeater(id)
 {
-    return Repeater.findById(id);
+    return Repeater.findById(id)
+        .populate('group');
 }
 
 /**
@@ -25,9 +43,7 @@ export async function storeRepeater(repeater)
             new: true,
             upsert: true,
         });
-    } catch (e) {
-        console.log(e);
-    }
+    } catch (e) {}
 }
 
 /**
@@ -112,7 +128,7 @@ function extractMetaData(repeater)
             updatedInfoString = cleanString(updatedInfoString.replace(dmrIdMatchSingle[0], ''));
             dmrIdMatchArray.push(dmrIdMatchSingle[2]);
         });
-        meta.dmrId = dmrIdMatchArray.join(',');
+        meta.dmrId = dmrIdMatchArray.join('/');
     }
 
     // Check for EchoLink-indicator
@@ -168,6 +184,9 @@ function extractMetaData(repeater)
             stillRemaining.push(v);
         }
     });
+    if (meta.dtmf) {
+        meta.dtmf = meta.dtmf.join('/');
+    }
     updatedInfoString = stillRemaining.join('/');
 
     return {
@@ -180,10 +199,13 @@ function extractMetaData(repeater)
  * Format repeater-object.
  *
  * @param repeater
- * @returns {{}}
+ * @returns {Promise<{}|boolean>}
  */
-export function formatRepeater(repeater) {
+export async function formatRepeater(repeater) {
     repeater = setRepeaterObjectKeys(repeater);
+    if (!locatorIsValid(repeater.locator)) {
+        return false;
+    }
     repeater.originalInfo = repeater.info;
     const metaData = extractMetaData(repeater);
     if (metaData) {
@@ -192,16 +214,39 @@ export function formatRepeater(repeater) {
         }
         repeater.parsedInfo = metaData.parsedInfo;
     }
-    if (locatorIsValid(repeater.locator)) {
-        const location = decodeLatLonFromMaidenheadLocator(repeater.locator);
-        repeater.location = {
-            type: 'Point',
-            coordinates: [location.lat, location.lon],
-        };
-    } else {
-        repeater.locator = null;
+    const location = decodeLatLonFromMaidenheadLocator(repeater.locator);
+    if (!location) {
+        return false;
+    }
+    repeater.location = {
+        type: 'Point',
+        coordinates: [location.lon, location.lat],
+    };
+    const group = repeater.group;
+    repeater.group = null;
+    if (group) {
+        const resolvedGroup = await resolveGroup(group);
+        if (resolvedGroup) {
+            repeater.group = resolvedGroup;
+        }
     }
     return repeater;
+}
+
+/**
+ * Resolve NRRL group object Id.
+ *
+ * @param repeater
+ * @returns {Promise<*>}
+ */
+export async function resolveGroup(groupName)
+{
+    let groupObject = await Group.findOne({ name: groupName });
+
+    if (groupObject === null) {
+        groupObject = await Group.create({ name: groupName });
+    }
+    return groupObject.id;
 }
 
 /**

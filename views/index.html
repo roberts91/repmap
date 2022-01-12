@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>LA Repeater map</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="map"></div>
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1Ijoicm9iZXJ0czkxIiwiYSI6ImNreTllb2ZoMDA1bWwycW8wbHk1bTl0bTMifQ.tsLwO3NK3Gtx6tjGcaetSQ';
+    const defaultMapCenter = [10, 65];
+    const defaultMapZoom = 3;
+    let map;
+    let markers = [];
+
+    mapInit();
+
+    /**
+     * Initialize map.
+     *
+     * @returns {Promise<void>}
+     */
+    async function mapInit()
+    {
+        map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/light-v10',
+            center: getInitialMapCenter(),
+            zoom: getInitialMapZoom(),
+        });
+        map.addControl(new mapboxgl.NavigationControl());
+
+        map.on('load', async () => {
+
+            map.loadImage('https://docs.mapbox.com/mapbox-gl-js/assets/custom_marker.png', function(error, image) {
+                if (error) throw error;
+                map.addImage('custom-marker', image);
+            });
+
+            await createMarkerMarkup();
+            const markers = await queryMarkers();
+            if (markers) {
+                await setMarkers(markers);
+            }
+
+            map.on('click', 'points', markerClickEvent);
+            map.on('zoomend', () => {
+                window.localStorage.setItem('mapZoom', map.getZoom());
+                updateMarkers();
+            });
+            map.on('moveend', () => {
+                window.localStorage.setItem('mapCenter', JSON.stringify(map.getCenter()));
+                updateMarkers();
+            });
+        });
+    }
+
+    /**
+     * Clear existing markers.
+     */
+    async function clearMarkers()
+    {
+        markers.map(async function (marker) {
+            marker.remove();
+        });
+        markers = [];
+    }
+
+    /**
+     * Update markers.
+     */
+    async function updateMarkers()
+    {
+        console.log('updateMarkers');
+        const newMarkers = await queryMarkers();
+        await clearMarkers();
+        if (newMarkers) {
+            await setMarkers(newMarkers);
+        }
+    }
+
+    /**
+     * Marker click event.
+     *
+     * @param e
+     */
+    function markerClickEvent(e)
+    {
+        const coordinates = e.features[0].geometry.coordinates.slice();
+        const description = e.features[0].properties.description;
+        while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+            coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+        }
+        new mapboxgl.Popup().setLngLat(coordinates).setHTML(description).addTo(map);
+    }
+
+    /**
+     * Place markers on map.
+     *
+     * @param markersArray
+     * @returns {Promise<void>}
+     */
+    async function setMarkers(markersArray)
+    {
+        console.log('Got ' + Object.values(markersArray).length + ' repeaters/markers.');
+        markersArray.forEach(function (repeater) {
+            var popup = new mapboxgl.Popup({offset: 25})
+                .setHTML(generateRepeaterPopup(repeater));
+            const marker = new mapboxgl.Marker()
+                .setLngLat(repeater.location.coordinates)
+                .setPopup(popup)
+                .addTo(map);
+            markers.push(marker);
+        });
+
+    }
+
+    /**
+     * Query the API for markers based on the current map bounds.
+     *
+     * @returns {Promise<any>}
+     */
+    async function queryMarkers()
+    {
+        const options = {
+            method: 'POST',
+            body: JSON.stringify({
+                map_bounds: getMapBounds()
+            }),
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        };
+        try {
+            return await fetch('/api/map-data/', options).then(function (response) {
+                return response.json();
+            });
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get and format map bounds.
+     *
+     * @returns {{southWest: {lon: *, lat: *}, northEast: {lon: *, lat: *}}}
+     */
+    function getMapBounds()
+    {
+        const bounds = map.getBounds(),
+            southWest = bounds._sw,
+            northEast = bounds._ne;
+        return {
+            southWest: {
+                lat: maxValue(southWest.lat, 90),
+                lon: maxValue(southWest.lng, 180)
+            },
+            northEast: {
+                lat: maxValue(northEast.lat, 90),
+                lon: maxValue(northEast.lng, 180)
+            }
+        };
+    }
+
+    /**
+     *
+     * @param value
+     * @param maxValue
+     * @returns {*}
+     */
+    function maxValue(value, maxValue)
+    {
+        if (value > maxValue) {
+            return maxValue - 0.0000000000001;
+        }
+        if (value < -maxValue) {
+            return -maxValue + 0.0000000000001;
+        }
+        return value;
+    }
+
+    /**
+     * Create marker markup.
+     *
+     * @returns {Promise<void>}
+     */
+    async function createMarkerMarkup()
+    {
+        var el = document.createElement('div');
+        el.id = 'marker';
+    }
+
+    /**
+     * Get initial map zoom.
+     *
+     * @returns {string|number}
+     */
+    function getInitialMapZoom()
+    {
+        const storedZoom = window.localStorage.getItem('mapZoom');
+        if (storedZoom) {
+            return storedZoom;
+        } else {
+            return defaultMapZoom;
+        }
+    }
+
+    /**
+     * Get initial map center.
+     *
+     * @returns {number[]|any}
+     */
+    function getInitialMapCenter()
+    {
+        const storedCenter = window.localStorage.getItem('mapCenter');
+        if (storedCenter) {
+            try {
+                return JSON.parse(storedCenter);
+            } catch (e) {
+                return defaultMapCenter;
+            }
+        } else {
+            return defaultMapCenter;
+        }
+    }
+
+    /**
+     * Generate marker popup markup.
+     *
+     * @param repeater
+     * @returns {string}
+     */
+    function generateRepeaterPopup(repeater)
+    {
+        return '<strong>' + repeater.callsign + '</strong>' + generateRepeaterDescription(repeater);
+    }
+
+    /**
+     * Generate repeater description string.
+     *
+     * @param repeater
+     * @returns {string}
+     */
+    function generateRepeaterDescription(repeater)
+    {
+        let markup = '';
+        markup += '<p>QTH: ' + repeater.qth + '</p>';
+        markup += '<p>TX freq: ' + repeater.txFreq + ' MHz</p>';
+        markup += '<p>RX freq: ' + repeater.rxFreq + ' MHz</p>';
+        markup += '<p>Group: ' + repeater.group.name + '</p>';
+        markup += '<p>Type: ' + repeater.type + '</p>';
+        markup += '<p>Locator: ' + repeater.locator + '</p>';
+        markup += '<p>Latitude: ' + repeater.location.coordinates.lat + '</p>';
+        markup += '<p>Longitude: ' + repeater.location.coordinates.lon + '</p>';
+        markup += '<p>' + repeater.parsedInfo + '</p>';
+
+
+        if (getMeta('toneBurst1750', repeater.metaData)) {
+            markup += '<p>1750 Hz: Yes</p>';
+        }
+        const ctcss = getMeta('ctcss', repeater.metaData);
+        if (ctcss) {
+            markup += '<p>Tone: ' + ctcss + ' Hz</p>';
+        }
+
+        const dmrId = getMeta('dmrId', repeater.metaData);
+        if (dmrId) {
+            markup += '<p>DMR ID: ' + dmrId + '</p>';
+        }
+
+        const echoLink = getMeta('echoLink', repeater.metaData);
+        if (echoLink) {
+            markup += '<p>EchoLink: ' + echoLink + '</p>';
+        }
+
+        if (getMeta('ccir', repeater.metaData)) {
+            markup += '<p>CCIR: Yes</p>';
+        }
+
+        if (getMeta('winlink', repeater.metaData)) {
+            markup += '<p>Winlink: Yes</p>';
+        }
+
+        if (getMeta('igate', repeater.metaData)) {
+            markup += '<p>iGate: Yes</p>';
+        }
+
+        const dtmf = getMeta('dtmf', repeater.metaData);
+        if (dtmf) {
+            markup += '<p>DTMF: ' + dtmf + '</p>';
+        }
+
+        return markup;
+    }
+
+    /**
+     * Get item from repeater meta data.
+     *
+     * @param key
+     * @param meta
+     * @returns {boolean|*}
+     */
+    function getMeta(key, meta)
+    {
+        if (meta && typeof meta[key] !== 'undefined') {
+            return meta[key];
+        }
+        return false;
+    }
+</script>
+</body>
+</html>

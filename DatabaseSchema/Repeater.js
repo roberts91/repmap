@@ -5,7 +5,10 @@ const repeaterSchema = new mongoose.Schema({
     qth: String,
     txFreq: String,
     rxFreq: String,
-    group: String,
+    group: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Group'
+    },
     locator: String,
     type: String,
     info: String,
@@ -27,17 +30,16 @@ const repeaterSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-repeaterSchema.index({loc: '2dsphere'});
+repeaterSchema.index({ location: '2dsphere' });
 
 repeaterSchema.methods.toJSON = function() {
     var obj = this.toObject();
     delete obj.__v;
-
+    delete obj.group.__v;
     obj.location.coordinates = {
-        lat: obj.location.coordinates[0],
-        lon: obj.location.coordinates[1]
+        lon: obj.location.coordinates[0],
+        lat: obj.location.coordinates[1],
     };
-
     return obj;
 }
 
